@@ -332,3 +332,106 @@
     )
   )
 )
+
+;; Token-Weighted Voting System
+;; Democratic decision-making with economic alignment
+;; Vote weight proportional to token stake committed
+(define-public (vote
+    (proposal-id uint)
+    (vote-for bool)
+    (amount uint)
+  )
+  (let (
+      (proposal (unwrap! (get-proposal proposal-id) err-not-found))
+      (asset-id (get asset-id proposal))
+      (balance (get-balance tx-sender asset-id))
+    )
+    (begin
+      ;; Validation: Comprehensive voting eligibility checks
+      (asserts! (>= balance amount) err-invalid-amount)
+      (asserts! (< stacks-block-height (get end-height proposal)) err-vote-ended)
+      (asserts! (is-none (get-vote proposal-id tx-sender)) err-vote-exists)
+      ;; Vote Recording: Individual vote commitment
+      (map-set votes {
+        proposal-id: proposal-id,
+        voter: tx-sender,
+      } { vote-amount: amount }
+      )
+      ;; Tally Update: Aggregate vote counting
+      (ok (map-set proposals { proposal-id: proposal-id }
+        (merge proposal {
+          votes-for: (if vote-for
+            (+ (get votes-for proposal) amount)
+            (get votes-for proposal)
+          ),
+          votes-against: (if vote-for
+            (get votes-against proposal)
+            (+ (get votes-against proposal) amount)
+          ),
+        })
+      ))
+    )
+  )
+)
+
+;; READ-ONLY QUERY INTERFACE
+
+;; Asset Information Retrieval
+;; Returns comprehensive asset metadata and current state
+(define-read-only (get-asset-info (asset-id uint))
+  (map-get? assets { asset-id: asset-id })
+)
+
+;; Token Balance Query
+;; Returns fractional ownership amount for specific user and asset
+(define-read-only (get-balance
+    (owner principal)
+    (asset-id uint)
+  )
+  (default-to u0
+    (get balance
+      (map-get? token-balances {
+        owner: owner,
+        asset-id: asset-id,
+      })
+    ))
+)
+
+;; Governance Proposal Query
+;; Returns complete proposal details including voting status
+(define-read-only (get-proposal (proposal-id uint))
+  (map-get? proposals { proposal-id: proposal-id })
+)
+
+;; Individual Vote Query
+;; Returns voting decision and stake amount for specific proposal
+(define-read-only (get-vote
+    (proposal-id uint)
+    (voter principal)
+  )
+  (map-get? votes {
+    proposal-id: proposal-id,
+    voter: voter,
+  })
+)
+
+;; Oracle Price Feed Query
+;; Returns current market price and oracle metadata
+(define-read-only (get-price-feed (asset-id uint))
+  (map-get? price-feeds { asset-id: asset-id })
+)
+
+;; Dividend Claim History Query
+;; Returns last claimed dividend amount for tracking purposes
+(define-read-only (get-last-claim
+    (asset-id uint)
+    (claimer principal)
+  )
+  (default-to u0
+    (get last-claimed-amount
+      (map-get? dividend-claims {
+        asset-id: asset-id,
+        claimer: claimer,
+      })
+    ))
+)
